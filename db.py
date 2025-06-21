@@ -33,9 +33,9 @@ async def get_person_by_iin(pool, iin: str):
     FROM people p
     LEFT JOIN phone_numbers pn ON pn.person_id = p.id
     WHERE p.iin = $1
-    GROUP BY p.id, p.surname, p.name, p.iin
+    GROUP BY p.id
+    LIMIT 1
     """
-
     async with pool.acquire() as conn:
         return await conn.fetchrow(query, iin)
     
@@ -60,14 +60,9 @@ async def get_person_by_phone(pool, phone: str):
         STRING_AGG(pn.normalized_number, ', ') AS all_normalized_numbers
     FROM people p
     JOIN phone_numbers pn ON pn.person_id = p.id
-    WHERE p.id = (
-        SELECT p.id
-        FROM people p
-        JOIN phone_numbers pn ON pn.person_id = p.id
-        WHERE pn.normalized_number = $1
-        LIMIT 1
-    )
+    WHERE pn.normalized_number = $1
     GROUP BY p.id, p.surname, p.name, p.iin
+    LIMIT 1
     """
     async with pool.acquire() as conn:
         return await conn.fetchrow(query, phone)
