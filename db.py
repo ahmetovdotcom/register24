@@ -12,38 +12,38 @@ async def get_pool():
 
 
 async def get_person_by_iin(pool, iin: str):
-    query = """
-    SELECT 
-    p.id,
-    p.surname,
-    p.name,
-    p.patronymic,
-    p.gender,
-    p.birth_date,
-    p.identifier,
-    p.iin,
-    p.citizenship,
-    p.nationality,
-    p.address,
-    p.address_confirmed,
-    p.residence_start,
-    p.residence_end,
-    (
-        SELECT STRING_AGG(pn.raw_number, ', ') 
-        FROM phone_numbers pn 
-        WHERE pn.person_id = p.id
-    ) AS all_raw_numbers,
-    (
-        SELECT STRING_AGG(pn.normalized_number, ', ') 
-        FROM phone_numbers pn 
-        WHERE pn.person_id = p.id
-    ) AS all_normalized_numbers
-FROM people p
-WHERE p.iin = $1
-LIMIT 1;
-    """
     async with pool.acquire() as conn:
-        return await conn.fetchrow(query, iin)
+        # 1. Быстрый поиск по IIN без JOIN
+        person = await conn.fetchrow("""
+            SELECT 
+                id, surname, name, patronymic, gender, birth_date,
+                identifier, iin, citizenship, nationality,
+                address, address_confirmed, residence_start, residence_end
+            FROM people
+            WHERE iin = $1
+            LIMIT 1
+        """, iin)
+
+        if not person:
+            return None
+
+        # 2. Поиск телефонов по person_id
+        phones = await conn.fetch("""
+            SELECT raw_number, normalized_number
+            FROM phone_numbers
+            WHERE person_id = $1
+        """, person['id'])
+
+        # 3. Агрегация телефонов (как раньше)
+        all_raw = ', '.join([r['raw_number'] for r in phones])
+        all_norm = ', '.join([r['normalized_number'] for r in phones])
+
+        # 4. Объединение в единый результат
+        result = dict(person)
+        result['all_raw_numbers'] = all_raw
+        result['all_normalized_numbers'] = all_norm
+
+        return result
     
 async def get_person_by_phone(pool, phone: str):
     query = """
