@@ -24,13 +24,13 @@ def create_phone_buttons(phones: list[str], name) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def invite_friends_keyboard(bot_username: str, user_id: int) -> InlineKeyboardMarkup:
-    link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-
+def invite_friends_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    """
+    Кнопка с callback_data, чтобы бот прислал ссылку
+    """
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👥 Пригласить друзей", url=link)]
+        [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data=f"send_ref_{user_id}")]
     ])
-
 
 
 

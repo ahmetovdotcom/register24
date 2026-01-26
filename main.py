@@ -229,6 +229,18 @@ async def broadcast(message: Message):
     await message.answer(text, parse_mode="HTML")
 
 
+
+
+@dp.callback_query(F.data.startswith("send_ref_"))
+async def send_ref_link(callback: CallbackQuery):
+    user_id = callback.data.split("_")[-1]  # получаем user_id из callback_data
+    bot_info = await bot.get_me()
+    link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
+
+    await callback.message.answer(f"Вот твоя реферальная ссылка! Отправь друзьям эту ссылку: \n{link}")
+    await callback.answer()  # закрывает "часики" у кнопки
+
+
     
 
 
@@ -295,10 +307,7 @@ async def handle_input(message: Message, **kwargs):
         # 👥 ЕСЛИ НЕТ РЕФЕРАЛОВ — ПОКАЗЫВАЕМ КНОПКУ ПРИГЛАШЕНИЯ
         if not has_ref_access(message.from_user.id):
             bot_info = await bot.me()
-            invite_kb = invite_friends_keyboard(
-                bot_info.username,
-                message.from_user.id
-            )
+            invite_kb = invite_friends_keyboard(message.from_user.id)
 
             await message.answer(
                 result,

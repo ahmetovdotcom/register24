@@ -108,8 +108,8 @@ def format_person(p, user_id: int):
     phones_list = phones.split(', ')
     phones_block = "\n".join([f"├ Номер: {num}" for num in phones_list])
 
-    address = p['address'] if full_access else "🔒 Доступ ограничен\nПригласите 2 друзей"
-    iin = f"<code>{p['iin']}</code>" if full_access else "🔒 Доступ ограничен"
+    address = p['address'] if full_access else "🔒 Доступ ограничен"
+    iin = f"<code>{p['iin']}</code>" if full_access else "🔒 Доступ ограничен\n\nПригласите 2 друзей и получите доступ ко всем функциям!"
 
     return (
         f"📱 Телефон\n"
