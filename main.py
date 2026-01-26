@@ -7,9 +7,10 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKe
 
 from config import BOT_TOKEN, ADMIN_ID
 from db import get_pool, get_person_by_phone, get_person_by_iin
-from utils import calculate_age, format_person, add_user, is_user_allowed, get_user_list, remove_user, is_authorized
-from keyboards import create_phone_buttons, keyboardToChannel
+from utils import has_ref_access, calculate_age, format_person, add_user, is_user_allowed, get_user_list, remove_user, is_authorized,register_referral
+from keyboards import create_phone_buttons, keyboardToChannel, invite_friends_keyboard
 from datetime import datetime, timedelta
+
 
 
 
@@ -20,7 +21,35 @@ pool = None
 
 
 @dp.message(CommandStart())
+
 async def cmd_start(message: Message):
+    user_id = message.from_user.id
+    args = message.text.split()
+
+    # 👥 РЕФЕРАЛЬНЫЙ СТАРТ
+    if len(args) > 1 and args[1].startswith("ref_"):
+        try:
+            referrer_id = int(args[1].replace("ref_", ""))
+            register_referral(user_id, referrer_id)
+        except:
+            pass
+
+    # ❌ Если пользователь не авторизован
+    if not is_user_allowed(user_id):
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔓 Запросить доступ", callback_data="request_access")]
+        ])
+
+        await message.answer(
+            "🚫 <b>Доступ ограничен</b>\n\n"
+            "Для использования бота необходимо получить разрешение администратора.\n"
+            "Нажмите кнопку ниже, чтобы отправить запрос 👇",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+        return
+
+    # ✅ Если авторизован
     text = (
         "👋 Добро пожаловать в бота для поиска информации на основе утечки данных по Казахстану.\n\n"
         "🔍 В базе содержится информация о <b>16 миллионах граждан</b>, собранная из недавней утечки. "
@@ -29,13 +58,9 @@ async def cmd_start(message: Message):
         "├ ИИН — 12 цифр (например, <code>040404540484</code>)\n"
         "├ Номер телефона — 11 цифр, начинающихся с 7 (например, <code>77771113388</code>)\n"
         "└ Не беспокойтесь о пробелах, +, -, скобках — они обрежутся автоматически.\n\n"
-        "📢 Рекомендуем подписаться на наш канал, чтобы быть в курсе обновлений\n\n"
-        "Введите ИИН или номер телефона для начала поиска:"
+        "Введите ИИН или номер телефона для поиска 👇"
     )
-
-    
-
-    await message.answer(text, parse_mode="HTML", reply_markup=keyboardToChannel)
+    await message.answer(text, parse_mode="HTML")
 
 @dp.message(Command("users"))
 async def list_users(message: Message):
@@ -54,6 +79,27 @@ async def list_users(message: Message):
         text += f"• <b>{name}</b> {username} — <code>{uid}</code>\n/remove_{uid}\n\n"
 
     await message.answer(text, parse_mode="HTML")
+
+@dp.message(Command("stats"))
+async def admin_stats(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    users = get_user_list()
+
+    total_users = len(users)
+    referred_users = sum(1 for u in users.values() if "referrer" in u)
+    active_referrers = sum(1 for u in users.values() if u.get("invited", 0) > 0)
+
+    text = (
+        "📊 <b>Статистика бота</b>\n\n"
+        f"👥 Всего пользователей: <b>{total_users}</b>\n"
+        f"🔗 Пришли по рефералке: <b>{referred_users}</b>\n"
+        f"🚀 Приглашали других: <b>{active_referrers}</b>"
+    )
+
+    await message.answer(text, parse_mode="HTML")
+
 
 
 @dp.message(F.text.startswith("/remove_"))
@@ -113,7 +159,7 @@ async def grant_access(callback: CallbackQuery):
     try:
         await bot.send_message(
             user_id,
-            f"✅ Вам выдан доступ до {until}." if days else "✅ Вам выдан постоянный доступ."
+            f"✅ Вам выдан доступ до {until}." if days else "✅ Вам выдан постоянный доступ. Нажмите /start"
         )
     except:
         pass
@@ -136,6 +182,56 @@ async def deny_access(callback: CallbackQuery):
         pass
 
 
+@dp.message(Command("broadcast"))
+async def broadcast(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    text = message.text.replace("/broadcast", "").strip()
+    if not text:
+        await message.answer("❗ Использование: /broadcast текст рассылки")
+        return
+
+    users = get_user_list()
+
+    sent = 0
+    failed = 0
+
+    await message.answer("📣 Начинаю рассылку...")
+
+    for user_id in users.keys():
+        try:
+            await bot.send_message(int(user_id), text, parse_mode="HTML")
+            sent += 1
+            await asyncio.sleep(0.05)  # ⛔ антифлуд
+        except:
+            failed += 1
+
+    await message.answer(
+        f"✅ Рассылка завершена\n\n"
+        f"📨 Отправлено: <b>{sent}</b>\n"
+        f"❌ Ошибок: <b>{failed}</b>",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(Command("admin"))
+async def broadcast(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    
+    text = (
+        "/users - юзеры\n"
+        f"/stats - статистика\n"
+        f"/broadcast - рассылка\n"
+    )
+
+    await message.answer(text, parse_mode="HTML")
+
+
+    
+
+
 
 
 
@@ -148,39 +244,73 @@ async def deny_access(callback: CallbackQuery):
 @is_authorized
 async def handle_input(message: Message, **kwargs):
     global pool
+
     text = message.text.strip()
     digits = re.sub(r"\D", "", text)
 
     loading_msg = await message.answer("🔍 Идёт поиск...")
-    person = None  # ← Добавили безопасную инициализацию
+    person = None
 
     try:
+        # 🔎 Поиск по ИИН
         if len(digits) == 12:
             person = await get_person_by_iin(pool, digits)
             if person:
-                result = "✅ Найден по ИИН:\n\n" + format_person(person)
+                result = "✅ Найден по ИИН:\n\n" + format_person(
+                    person,
+                    message.from_user.id
+                )
             else:
                 result = "❌ Пользователь с таким ИИН не найден."
 
+        # 🔎 Поиск по номеру
         elif len(digits) == 11 and digits.startswith("7"):
             person = await get_person_by_phone(pool, digits)
             if person:
-                result = "✅ Найден по номеру:\n\n" + format_person(person)
+                result = "✅ Найден по номеру:\n\n" + format_person(
+                    person,
+                    message.from_user.id
+                )
             else:
                 result = "❌ Пользователь с таким номером не найден."
+
         else:
-            result = "❗ Пожалуйста, отправьте корректный ИИН (12 цифр) или номер телефона (11 цифр, начиная с 7)."
+            result = (
+                "❗ Пожалуйста, отправьте корректный ИИН (12 цифр) "
+                "или номер телефона (11 цифр, начиная с 7)."
+            )
 
     except Exception as e:
         result = f"⚠️ Ошибка при поиске: {e}"
 
     await loading_msg.delete()
 
+    # 📤 Отправка результата
     if person:
         phones_raw = person['all_raw_numbers'] or ''
         phones_list = phones_raw.split(', ')
-        keyboard = create_phone_buttons(phones_list)
-        await message.answer(result, parse_mode="HTML", reply_markup=keyboard)
+        name = person['name']
+        phone_kb = create_phone_buttons(phones_list, name)
+
+        # 👥 ЕСЛИ НЕТ РЕФЕРАЛОВ — ПОКАЗЫВАЕМ КНОПКУ ПРИГЛАШЕНИЯ
+        if not has_ref_access(message.from_user.id):
+            bot_info = await bot.me()
+            invite_kb = invite_friends_keyboard(
+                bot_info.username,
+                message.from_user.id
+            )
+
+            await message.answer(
+                result,
+                parse_mode="HTML",
+                reply_markup=invite_kb
+            )
+        else:
+            await message.answer(
+                result,
+                parse_mode="HTML",
+                reply_markup=phone_kb
+            )
     else:
         await message.answer(result)
 
