@@ -30,7 +30,14 @@ async def cmd_start(message: Message):
     if len(args) > 1 and args[1].startswith("ref_"):
         try:
             referrer_id = int(args[1].replace("ref_", ""))
-            register_referral(user_id, referrer_id)
+            # передаем реальные данные нового пользователя
+            register_referral(
+                new_user_id=user_id,
+                referrer_id=referrer_id,
+                first_name=message.from_user.first_name or "",
+                last_name=message.from_user.last_name or "",
+                username=message.from_user.username or ""
+            )
         except:
             pass
 
@@ -76,7 +83,18 @@ async def list_users(message: Message):
     for uid, info in users.items():
         name = f"{info.get('first_name', '')} {info.get('last_name', '')}".strip()
         username = f"@{info.get('username')}" if info.get('username') else "—"
-        text += f"• <b>{name}</b> {username} — <code>{uid}</code>\n/remove_{uid}\n\n"
+        text += f"• <b>{name}</b> {username} — <code>{uid}</code>\n"
+
+        # список пригласивших (рефералов)
+        invited_list = [
+            f"{users[str(rid)]['first_name']} (@{users[str(rid)]['username']})"
+            for rid, u in users.items()
+            if u.get("referrer") == int(uid)
+        ]
+        if invited_list:
+            text += f"   👥 Пригласил: {', '.join(invited_list)}\n"
+
+        text += f"/remove_{uid}\n\n"
 
     await message.answer(text, parse_mode="HTML")
 
@@ -302,26 +320,33 @@ async def handle_input(message: Message, **kwargs):
         phones_raw = person['all_raw_numbers'] or ''
         phones_list = phones_raw.split(', ')
         name = person['name']
-        phone_kb = create_phone_buttons(phones_list, name)
 
-        # 👥 ЕСЛИ НЕТ РЕФЕРАЛОВ — ПОКАЗЫВАЕМ КНОПКУ ПРИГЛАШЕНИЯ
-        if not has_ref_access(message.from_user.id):
-            bot_info = await bot.me()
-            invite_kb = invite_friends_keyboard(message.from_user.id)
+        # 🔘 Кнопки телефонов (если есть доступ)
+        phone_kb = None
+        if has_ref_access(message.from_user.id):
+            phone_kb = create_phone_buttons(phones_list, name)
 
-            await message.answer(
-                result,
-                parse_mode="HTML",
-                reply_markup=invite_kb
-            )
+        # 👥 Кнопка приглашения — ВСЕГДА
+        invite_kb = invite_friends_keyboard(message.from_user.id)
+
+        # 🧩 Объединяем клавиатуры
+        if phone_kb:
+            # если есть доступ — добавляем invite к телефонам
+            phone_kb.inline_keyboard.extend(invite_kb.inline_keyboard)
+            final_kb = phone_kb
         else:
-            await message.answer(
-                result,
-                parse_mode="HTML",
-                reply_markup=phone_kb
-            )
+            # если нет доступа — только invite
+            final_kb = invite_kb
+
+        await message.answer(
+            result,
+            parse_mode="HTML",
+            reply_markup=final_kb
+        )
     else:
-        await message.answer(result)
+        # даже если человек не найден — можно пригласить друзей
+        invite_kb = invite_friends_keyboard(message.from_user.id)
+        await message.answer(result, reply_markup=invite_kb)
 
 async def main():
     global pool

@@ -139,7 +139,7 @@ def has_ref_access(user_id: int) -> bool:
     return user.get("invited", 0) >= REF_REQUIRED
 
 
-def register_referral(new_user_id: int, referrer_id: int):
+def register_referral(new_user_id: int, referrer_id: int, first_name="", last_name="", username=""):
     users = get_user_list()
 
     # если приглашаемый уже есть — НЕ считаем
@@ -150,11 +150,11 @@ def register_referral(new_user_id: int, referrer_id: int):
     if new_user_id == referrer_id:
         return
 
-    # создаём запись для нового пользователя
+    # создаём запись для нового пользователя с данными Telegram
     users[str(new_user_id)] = {
-        "first_name": "",
-        "last_name": "",
-        "username": "",
+        "first_name": first_name,
+        "last_name": last_name,
+        "username": username,
         "access_until": None,
         "invited": 0,
         "referrer": referrer_id
