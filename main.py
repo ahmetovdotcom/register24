@@ -79,29 +79,51 @@ async def list_users(message: Message):
         await message.answer("📭 Список пользователей пуст.")
         return
 
-    text = "📋 <b>Список пользователей:</b>\n\n"
-    for uid, info in users.items():
-        name = f"{info.get('first_name', '')} {info.get('last_name', '')}".strip()
-        username = f"@{info.get('username')}" if info.get('username') else "—"
-        text += f"• <b>{name}</b> {username} — <code>{uid}</code>\n"
+    # ---------- Генерация блока для одного пользователя ----------
+    def render_user_block(uid: str, user: dict, users_dict: dict) -> str:
+        name = user.get("first_name") or "Без имени"
+        username = user.get("username")
+        if username:
+            title = f"<b>{name}</b> @{username}"
+        else:
+            title = f"<b>{name}</b> — —"
 
-        # список пригласивших (рефералов)
-        invited_list = [
-            f"{users[str(rid)]['first_name']} (@{users[str(rid)]['username']})"
-            for rid, u in users.items()
-            if u.get("referrer") == int(uid)
+        block = f"• {title} — <code>{uid}</code>\n"
+
+        # Проверяем есть ли рефералы
+        referrals = [
+            r_id for r_id, u in users_dict.items() if u.get("referrer") == int(uid)
         ]
-        if invited_list:
-            text += f"   👥 Пригласил: {', '.join(invited_list)}\n"
+        if referrals:
+            for rid in referrals:
+                ref_user = users_dict.get(str(rid), {})
+                rname = ref_user.get("first_name") or "Без имени"
+                run = ref_user.get("username")
+                if run:
+                    block += f"    └─ {rname} (@{run}) — <code>{rid}</code>\n"
+                else:
+                    block += f"    └─ {rname} (без username) — <code>{rid}</code>\n"
 
-        text += f"/remove_{uid}\n\n"
+        block += f"/remove_{uid}\n\n"
+        return block
 
-    
-    await send_long_message(
-        bot=message.bot,
-        chat_id=message.chat.id,
-        text=text
-    )
+    # ---------- Функция безопасной отправки по частям ----------
+    async def send_html_chunks(bot, chat_id, blocks):
+        MAX = 3800  # запас под HTML
+        buffer = "📋 <b>Список пользователей:</b>\n\n"
+        for block in blocks:
+            if len(buffer) + len(block) > MAX:
+                await bot.send_message(chat_id, buffer, parse_mode="HTML")
+                buffer = ""
+            buffer += block
+        if buffer:
+            await bot.send_message(chat_id, buffer, parse_mode="HTML")
+
+    # ---------- Генерируем все блоки ----------
+    blocks = [render_user_block(uid, user, users) for uid, user in users.items()]
+
+    # ---------- Отправляем пользователю ----------
+    await send_html_chunks(bot, message.chat.id, blocks)
 
 @dp.message(Command("stats"))
 async def admin_stats(message: Message):
