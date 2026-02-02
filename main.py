@@ -7,7 +7,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKe
 
 from config import BOT_TOKEN, ADMIN_ID
 from db import get_pool, get_person_by_phone, get_person_by_iin
-from utils import has_ref_access, calculate_age, format_person, add_user, is_user_allowed, get_user_list, remove_user, is_authorized,register_referral
+from utils import send_long_message, has_ref_access, calculate_age, format_person, add_user, is_user_allowed, get_user_list, remove_user, is_authorized,register_referral
 from keyboards import create_phone_buttons, keyboardToChannel, invite_friends_keyboard
 from datetime import datetime, timedelta
 
@@ -96,7 +96,12 @@ async def list_users(message: Message):
 
         text += f"/remove_{uid}\n\n"
 
-    await message.answer(text, parse_mode="HTML")
+    
+    await send_long_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        text=text
+    )
 
 @dp.message(Command("stats"))
 async def admin_stats(message: Message):

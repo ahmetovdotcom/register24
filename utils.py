@@ -167,3 +167,15 @@ def register_referral(new_user_id: int, referrer_id: int, first_name="", last_na
         )
 
     save_users(users)
+
+
+async def send_long_message(bot, chat_id, text, parse_mode="HTML"):
+    MAX_LEN = 4000
+    parts = [text[i:i + MAX_LEN] for i in range(0, len(text), MAX_LEN)]
+
+    for part in parts:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=part,
+            parse_mode=parse_mode
+        )
