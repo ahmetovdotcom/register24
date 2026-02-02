@@ -274,6 +274,26 @@ async def broadcast(message: Message):
     await message.answer(text, parse_mode="HTML")
 
 
+@dp.message(F.text.startswith("/ref"))
+@is_authorized  # <-- проверка доступа
+async def show_referral(message: Message, **kwargs):
+    user_id = str(message.from_user.id)
+    users = get_user_list()
+    user = users.get(user_id, {})
+
+    invited_count = user.get("invited", 0)
+
+    bot_info = await bot.get_me()
+    ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
+
+    text = (
+        f"👤 <b>Ваши рефералы</b>\n"
+        f"Вы пригласили: <b>{invited_count}</b> друзей\n\n"
+        f"📎 Ваша реферальная ссылка:\n{ref_link}\n\n"
+        f"Отправьте ссылку друзьям, чтобы получать больше доступа!"
+    )
+
+    await message.answer(text, parse_mode="HTML")
 
 
 @dp.callback_query(F.data.startswith("send_ref_"))
